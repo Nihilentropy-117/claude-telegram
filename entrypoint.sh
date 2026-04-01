@@ -50,6 +50,22 @@ Dev libraries installed: libffi, libssl, libxml2, libxslt (most pip packages com
 
 - `/projects` — mounted project directories from the host
 - `/venv` — persistent Python virtual environment
+- `/temp` — Telegram file downloads land here
+- `/temp/outbox/` — **drop files here to send them to the user via Telegram**
+
+## Sending files to the user
+
+Write any file to `/temp/outbox/` and the bot will automatically send it to the
+user's Telegram chat after your response. The file is deleted once delivered.
+
+File type routing:
+- Images (`.jpg`, `.png`, `.gif`, `.webp`, `.bmp`) → `sendPhoto`
+- Video (`.mp4`, `.avi`, `.mov`, `.mkv`, `.webm`) → `sendVideo`
+- Audio (`.mp3`, `.ogg`, `.wav`, `.flac`, `.m4a`, `.aac`) → `sendAudio`
+- Everything else → `sendDocument`
+
+Example: save a matplotlib chart as `/temp/outbox/chart.png` and it will appear
+in chat as an image.
 CLAUDEMD
 
 exec "$@"
