@@ -1,12 +1,28 @@
 services:
+  telegram-bot-api:
+    image: aiogram/telegram-bot-api:latest
+    container_name: telegram-bot-api
+    restart: unless-stopped
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
+      TELEGRAM_LOCAL: 1
+    volumes:
+      - ./telegram-bot-api-data:/var/lib/telegram-bot-api
+    ports:
+      - "8081:8081"
+
   claude-bot:
     build: .
     container_name: claude-telegram-bot
     restart: unless-stopped
     stdin_open: true
     tty: true
+    depends_on:
+      - telegram-bot-api
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_API_BASE=http://telegram-bot-api:8081
       - ALLOWED_USER_IDS=${ALLOWED_USER_IDS}
       - DEFAULT_PROJECT=/projects
       - DEFAULT_MODEL=sonnet
@@ -26,4 +42,5 @@ services:
       - ./apt-cache:/var/cache/apt
       # Telegram file downloads
       - ./temp:/temp
-    network_mode: bridge
+      # Shared Bot API data volume (enables direct local file reads)
+      - ./telegram-bot-api-data:/var/lib/telegram-bot-api:ro

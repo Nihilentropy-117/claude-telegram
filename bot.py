@@ -92,7 +92,10 @@ class UserState:
                 "Use markdown formatting compatible with Telegram. "
                 "You have full root access in a sandboxed Docker container. "
                 "Install any packages you need freely — pip uses a persistent venv at /venv, "
-                "apt cache is persistent. See ~/.claude/CLAUDE.md for full details."
+                "apt cache is persistent. "
+                "To send a file to the user, write it to /temp/outbox/ — "
+                "the bot will automatically deliver it to Telegram after your response. "
+                "See ~/.claude/CLAUDE.md for full details."
             ),
             env={
                 "ANTHROPIC_MODEL": self._model_env(),
@@ -125,8 +128,10 @@ class UserState:
 # ---------------------------------------------------------------------------
 
 class TelegramAPI:
-    def __init__(self, token: str, client: httpx.AsyncClient):
-        self.base = f"https://api.telegram.org/bot{token}"
+    def __init__(self, token: str, client: httpx.AsyncClient, api_base: str | None = None):
+        base_url = (api_base or "https://api.telegram.org").rstrip("/")
+        self.base = f"{base_url}/bot{token}"
+        self.file_base = f"{base_url}/file/bot{token}"
         self.client = client
 
     async def call(self, method: str, **params) -> dict:
@@ -161,11 +166,36 @@ class TelegramAPI:
         return await self.call("getFile", file_id=file_id)
 
     async def download_file(self, file_path: str) -> bytes:
-        """Download a file from Telegram servers by its file_path."""
-        url = f"https://api.telegram.org/file/bot{self.base.split('/bot')[1]}/{file_path}"
+        """Download a file. With local Bot API, reads directly from the shared volume."""
+        local = Path(f"/var/lib/telegram-bot-api/{file_path}")
+        if local.exists():
+            return local.read_bytes()
+        url = f"{self.file_base}/{file_path}"
         resp = await self.client.get(url, timeout=120)
         resp.raise_for_status()
         return resp.content
+
+    async def _send_file(self, method: str, field: str, chat_id: int,
+                         file_path: str, caption: str | None = None) -> dict:
+        p = Path(file_path)
+        data: dict[str, str] = {"chat_id": str(chat_id)}
+        if caption:
+            data["caption"] = caption
+        files = {field: (p.name, p.read_bytes())}
+        resp = await self.client.post(f"{self.base}/{method}", data=data, files=files, timeout=120)
+        return resp.json()
+
+    async def send_document(self, chat_id: int, file_path: str, caption: str | None = None) -> dict:
+        return await self._send_file("sendDocument", "document", chat_id, file_path, caption)
+
+    async def send_photo(self, chat_id: int, file_path: str, caption: str | None = None) -> dict:
+        return await self._send_file("sendPhoto", "photo", chat_id, file_path, caption)
+
+    async def send_video(self, chat_id: int, file_path: str, caption: str | None = None) -> dict:
+        return await self._send_file("sendVideo", "video", chat_id, file_path, caption)
+
+    async def send_audio(self, chat_id: int, file_path: str, caption: str | None = None) -> dict:
+        return await self._send_file("sendAudio", "audio", chat_id, file_path, caption)
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +252,38 @@ class StreamBridge:
 # ---------------------------------------------------------------------------
 
 TEMP_DIR = Path("/temp")
+OUTBOX_DIR = Path("/temp/outbox")
+
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+_VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
+_AUDIO_EXTS = {".mp3", ".ogg", ".wav", ".flac", ".m4a", ".aac"}
+
+
+async def send_outbox_files(tg: TelegramAPI, chat_id: int):
+    """Send every file in /temp/outbox/ to the chat, then delete it."""
+    if not OUTBOX_DIR.exists():
+        return
+    for f in sorted(OUTBOX_DIR.iterdir()):
+        if not f.is_file():
+            continue
+        ext = f.suffix.lower()
+        try:
+            if ext in _IMAGE_EXTS:
+                result = await tg.send_photo(chat_id, str(f))
+            elif ext in _VIDEO_EXTS:
+                result = await tg.send_video(chat_id, str(f))
+            elif ext in _AUDIO_EXTS:
+                result = await tg.send_audio(chat_id, str(f))
+            else:
+                result = await tg.send_document(chat_id, str(f))
+            if result.get("ok"):
+                f.unlink()
+                log.info("Sent outbox file: %s", f.name)
+            else:
+                log.error("Failed to send outbox file %s: %s", f.name, result)
+        except Exception as e:
+            log.error("Error sending outbox file %s: %s", f.name, e)
+
 
 async def extract_message(msg: dict, tg: TelegramAPI) -> str | None:
     """
@@ -479,6 +541,7 @@ async def handle_message(
             full_text += f"\n\n_Tools: {unique_tools}_"
 
         await bridge.finalize(full_text)
+        await send_outbox_files(tg, chat_id)
 
     except Exception as e:
         log.exception("Error handling message")
@@ -555,8 +618,9 @@ async def main():
     if not config.allowed_user_ids:
         log.warning("ALLOWED_USER_IDS not set — bot is open to everyone!")
 
+    api_base = os.environ.get("TELEGRAM_API_BASE")
     async with httpx.AsyncClient() as http_client:
-        tg = TelegramAPI(config.telegram_token, http_client)
+        tg = TelegramAPI(config.telegram_token, http_client, api_base=api_base)
 
         me = await tg.get_me()
         bot_name = me.get("result", {}).get("username", "unknown")
