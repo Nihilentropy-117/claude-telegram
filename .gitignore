@@ -1,0 +1,11 @@
+venv/
+pip-cache/
+apt-cache/
+temp/
+settings/
+.env
+venv/
+pip-cache/
+apt-cache/
+temp/
+settings/

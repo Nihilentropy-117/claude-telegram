@@ -1,0 +1,29 @@
+services:
+  claude-bot:
+    build: .
+    container_name: claude-telegram-bot
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ALLOWED_USER_IDS=${ALLOWED_USER_IDS}
+      - DEFAULT_PROJECT=/projects
+      - DEFAULT_MODEL=sonnet
+      - DEFAULT_EFFORT=high
+      - MAX_TURNS=10
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    volumes:
+      # Claude Code config
+      - ./settings:/settings
+      # Project directories
+      - ${HOME}/projects:/projects
+      # Persistent Python venv
+      - ./venv:/venv
+      # Pip download cache
+      - ./pip-cache:/pip-cache
+      # Apt package cache
+      - ./apt-cache:/var/cache/apt
+      # Telegram file downloads
+      - ./temp:/temp
+    network_mode: bridge

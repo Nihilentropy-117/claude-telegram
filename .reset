@@ -1,0 +1,2 @@
+tar -xvf cl*.tar &&
+mv claude-telegram-bot/* ./
