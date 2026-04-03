@@ -86,6 +86,7 @@ class UserState:
             permission_mode="bypassPermissions",
             cwd=self.project,
             max_turns=config.max_turns,
+            effort=self.effort,
             system_prompt=(
                 "You are Claude Code, accessed via Telegram. "
                 "Keep responses concise for mobile reading. "
