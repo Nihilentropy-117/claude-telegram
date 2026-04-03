@@ -2,11 +2,11 @@ venv/
 pip-cache/
 apt-cache/
 temp/
-settings/
+settings/*
+!settings/dot-claude/
+settings/dot-claude/*
+!settings/dot-claude/CLAUDE.md
 .env
-venv/
-pip-cache/
-apt-cache/
-temp/
-settings/
 telegram-bot-api-data/
+obsidian/settings/
+obsidian/vaults/

@@ -1,4 +1,23 @@
 services:
+  obsidian-sync:
+    build: ./obsidian
+    container_name: obsidian-sync
+    restart: unless-stopped
+    environment:
+      # Auth: token takes precedence; falls back to email + password
+      OBSIDIAN_AUTH_TOKEN: ${OBSIDIAN_AUTH_TOKEN:-}
+      OBSIDIAN_EMAIL: ${OBSIDIAN_EMAIL:-}
+      OBSIDIAN_PASSWORD: ${OBSIDIAN_PASSWORD:-}
+      # Comma-separated vault names, e.g. "My Vault" or "Vault1,Vault2"
+      OBSIDIAN_VAULT_NAMES: ${OBSIDIAN_VAULT_NAMES}
+      # E2E encryption password (only needed if vault has it enabled)
+      OBSIDIAN_VAULT_PASSWORD: ${OBSIDIAN_VAULT_PASSWORD:-}
+    volumes:
+      # Persistent auth + CLI config
+      - ./obsidian/settings:/root/.config
+      # Synced vault files (one subdirectory per vault name)
+      - ./obsidian/vaults:/vaults
+
   telegram-bot-api:
     image: aiogram/telegram-bot-api:latest
     container_name: telegram-bot-api
@@ -54,3 +73,6 @@ services:
 
       - /mnt/data/rw_files:/user-files/rw_files
       - /mnt/media/rw_media:/user-files/rw_media
+
+      # Obsidian notes (read-only; each vault appears as a subdirectory)
+      - ./obsidian/vaults:/user-files/notes:ro
