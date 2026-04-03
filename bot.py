@@ -6,6 +6,7 @@ Raw httpx against Telegram API. No framework.
 """
 
 import asyncio
+import html
 import logging
 import os
 import signal
@@ -149,8 +150,8 @@ class TelegramAPI:
         return data.get("result", [])
 
     async def send_message(self, chat_id: int, text: str, **kwargs) -> dict:
-        return await self.call("sendMessage", chat_id=chat_id, text=text,
-                               parse_mode="Markdown", **kwargs)
+        kwargs.setdefault("parse_mode", "Markdown")
+        return await self.call("sendMessage", chat_id=chat_id, text=text, **kwargs)
 
     async def send_draft(self, chat_id: int, draft_id: int, text: str, **kwargs) -> dict:
         return await self.call("sendMessageDraft", chat_id=chat_id,
@@ -207,6 +208,13 @@ def _truncate(s: str, max_len: int) -> str:
     return s if len(s) <= max_len else s[:max_len] + "…"
 
 
+def _h(s: str, max_len: int = 0) -> str:
+    """HTML-escape a string, optionally truncating first."""
+    if max_len:
+        s = _truncate(s, max_len)
+    return html.escape(s)
+
+
 async def send_tool_status(tg: TelegramAPI, chat_id: int, block: "ToolUseBlock"):
     """Send a live status message whenever Claude invokes a tool."""
     name = block.name
@@ -214,7 +222,7 @@ async def send_tool_status(tg: TelegramAPI, chat_id: int, block: "ToolUseBlock")
 
     if name == "Bash":
         cmd = inp.get("command", "")
-        line = f"⚙️ *Bash*\n```\n{_truncate(cmd, 400)}\n```"
+        line = f"⚙️ <b>Bash</b>\n<pre>{_h(cmd, 400)}</pre>"
     elif name == "Read":
         path = inp.get("file_path", "")
         offset = inp.get("offset")
@@ -222,37 +230,37 @@ async def send_tool_status(tg: TelegramAPI, chat_id: int, block: "ToolUseBlock")
         extra = ""
         if offset or limit:
             extra = f" (lines {offset or 0}–{(offset or 0) + (limit or 0)})"
-        line = f"📖 *Read* `{path}`{extra}"
+        line = f"📖 <b>Read</b> <code>{_h(path)}</code>{extra}"
     elif name == "Write":
         path = inp.get("file_path", "")
-        line = f"✏️ *Write* `{path}`"
+        line = f"✏️ <b>Write</b> <code>{_h(path)}</code>"
     elif name == "Edit":
         path = inp.get("file_path", "")
-        line = f"✏️ *Edit* `{path}`"
+        line = f"✏️ <b>Edit</b> <code>{_h(path)}</code>"
     elif name == "Glob":
         pattern = inp.get("pattern", "")
-        line = f"🔍 *Glob* `{pattern}`"
+        line = f"🔍 <b>Glob</b> <code>{_h(pattern)}</code>"
     elif name == "Grep":
         pattern = inp.get("pattern", "")
         path = inp.get("path", "")
-        loc = f" in `{path}`" if path else ""
-        line = f"🔍 *Grep* `{pattern}`{loc}"
+        loc = f" in <code>{_h(path)}</code>" if path else ""
+        line = f"🔍 <b>Grep</b> <code>{_h(pattern)}</code>{loc}"
     elif name == "WebSearch":
         query = inp.get("query", "")
-        line = f"🌐 *WebSearch* `{_truncate(query, 200)}`"
+        line = f"🌐 <b>WebSearch</b> <code>{_h(query, 200)}</code>"
     elif name == "WebFetch":
         url = inp.get("url", "")
-        line = f"🌐 *WebFetch* `{_truncate(url, 200)}`"
+        line = f"🌐 <b>WebFetch</b> <code>{_h(url, 200)}</code>"
     elif name == "Agent":
         desc = inp.get("description", inp.get("prompt", ""))
-        line = f"🤖 *Agent* _{_truncate(desc, 150)}_"
+        line = f"🤖 <b>Agent</b> <i>{_h(desc, 150)}</i>"
     elif name == "TodoWrite":
-        line = "📝 *TodoWrite* _(updating task list)_"
+        line = "📝 <b>TodoWrite</b> <i>(updating task list)</i>"
     else:
         inp_str = _truncate(str(inp), 120) if inp else ""
-        line = f"⚙️ *{name}*: `{inp_str}`" if inp_str else f"⚙️ *{name}*"
+        line = f"⚙️ <b>{_h(name)}</b>: <code>{_h(inp_str)}</code>" if inp_str else f"⚙️ <b>{_h(name)}</b>"
 
-    await tg.send_message(chat_id, line)
+    await tg.send_message(chat_id, line, parse_mode="HTML")
 
 
 # ---------------------------------------------------------------------------
