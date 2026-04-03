@@ -199,6 +199,63 @@ class TelegramAPI:
 
 
 # ---------------------------------------------------------------------------
+# Tool-use display helpers
+# ---------------------------------------------------------------------------
+
+def _truncate(s: str, max_len: int) -> str:
+    s = str(s)
+    return s if len(s) <= max_len else s[:max_len] + "…"
+
+
+async def send_tool_status(tg: TelegramAPI, chat_id: int, block: "ToolUseBlock"):
+    """Send a live status message whenever Claude invokes a tool."""
+    name = block.name
+    inp = getattr(block, "input", {}) or {}
+
+    if name == "Bash":
+        cmd = inp.get("command", "")
+        line = f"⚙️ *Bash*\n```\n{_truncate(cmd, 400)}\n```"
+    elif name == "Read":
+        path = inp.get("file_path", "")
+        offset = inp.get("offset")
+        limit = inp.get("limit")
+        extra = ""
+        if offset or limit:
+            extra = f" (lines {offset or 0}–{(offset or 0) + (limit or 0)})"
+        line = f"📖 *Read* `{path}`{extra}"
+    elif name == "Write":
+        path = inp.get("file_path", "")
+        line = f"✏️ *Write* `{path}`"
+    elif name == "Edit":
+        path = inp.get("file_path", "")
+        line = f"✏️ *Edit* `{path}`"
+    elif name == "Glob":
+        pattern = inp.get("pattern", "")
+        line = f"🔍 *Glob* `{pattern}`"
+    elif name == "Grep":
+        pattern = inp.get("pattern", "")
+        path = inp.get("path", "")
+        loc = f" in `{path}`" if path else ""
+        line = f"🔍 *Grep* `{pattern}`{loc}"
+    elif name == "WebSearch":
+        query = inp.get("query", "")
+        line = f"🌐 *WebSearch* `{_truncate(query, 200)}`"
+    elif name == "WebFetch":
+        url = inp.get("url", "")
+        line = f"🌐 *WebFetch* `{_truncate(url, 200)}`"
+    elif name == "Agent":
+        desc = inp.get("description", inp.get("prompt", ""))
+        line = f"🤖 *Agent* _{_truncate(desc, 150)}_"
+    elif name == "TodoWrite":
+        line = "📝 *TodoWrite* _(updating task list)_"
+    else:
+        inp_str = _truncate(str(inp), 120) if inp else ""
+        line = f"⚙️ *{name}*: `{inp_str}`" if inp_str else f"⚙️ *{name}*"
+
+    await tg.send_message(chat_id, line)
+
+
+# ---------------------------------------------------------------------------
 # Streaming bridge: SDK messages → Telegram sendMessageDraft
 # ---------------------------------------------------------------------------
 
@@ -511,7 +568,6 @@ async def handle_message(
 
         full_text_parts = []
         thinking_parts = []
-        tool_uses = []
 
         async for msg in client.receive_response():
             if isinstance(msg, AssistantMessage):
@@ -522,7 +578,8 @@ async def handle_message(
                     elif isinstance(block, ThinkingBlock):
                         thinking_parts.append(block.thinking)
                     elif isinstance(block, ToolUseBlock):
-                        tool_uses.append(block.name)
+                        log.info("Tool use: %s", block.name)
+                        await send_tool_status(tg, chat_id, block)
 
             elif isinstance(msg, ResultMessage):
                 if msg.total_cost_usd:
@@ -535,10 +592,6 @@ async def handle_message(
         if state.think == "on" and state.last_thinking:
             for chunk in StreamBridge._chunk_text(state.last_thinking, 4000):
                 await tg.send_message(chat_id, f"💭 _{chunk}_")
-
-        if tool_uses:
-            unique_tools = ", ".join(f"`{t}`" for t in dict.fromkeys(tool_uses))
-            full_text += f"\n\n_Tools: {unique_tools}_"
 
         await bridge.finalize(full_text)
         await send_outbox_files(tg, chat_id)
