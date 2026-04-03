@@ -28,6 +28,8 @@ ENV PIP_CACHE_DIR=/pip-cache
 
 # Install Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
+RUN npm install -g claudish
+
 
 # Install bot deps (goes into /venv once it exists, or system python on build)
 # Entrypoint creates the venv; on first run pip install runs again to populate it

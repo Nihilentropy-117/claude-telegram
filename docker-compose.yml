@@ -29,11 +29,15 @@ services:
       - DEFAULT_EFFORT=high
       - MAX_TURNS=10
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+
+    tmpfs:
+      - /user-files
+
     volumes:
       # Claude Code config
       - ./settings:/settings
       # Project directories
-      - ${HOME}/projects:/projects
+      - ./projects:/projects
       # Persistent Python venv
       - ./venv:/venv
       # Pip download cache
@@ -44,3 +48,9 @@ services:
       - ./temp:/temp
       # Shared Bot API data volume (enables direct local file reads)
       - ./telegram-bot-api-data:/var/lib/telegram-bot-api:ro
+      # Local File Access
+      - /mnt/data/user-files:/user-files/files:ro
+      - /mnt/media:/user-files/media:ro
+
+      - /mnt/data/rw_files:/user-files/rw_files
+      - /mnt/media/rw_media:/user-files/rw_media

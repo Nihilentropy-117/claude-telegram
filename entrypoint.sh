@@ -21,7 +21,8 @@ fi
 # Ensure bot dependencies are in the venv
 /venv/bin/pip install --quiet -r /app/requirements.txt
 
-# --- Global CLAUDE.md ---
+# --- Global CLAUDE.md (only create if missing) ---
+if [ ! -f /settings/dot-claude/CLAUDE.md ]; then
 cat > /settings/dot-claude/CLAUDE.md << 'CLAUDEMD'
 # Environment
 
@@ -67,5 +68,6 @@ File type routing:
 Example: save a matplotlib chart as `/temp/outbox/chart.png` and it will appear
 in chat as an image.
 CLAUDEMD
+fi
 
 exec "$@"

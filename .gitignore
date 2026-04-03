@@ -9,3 +9,4 @@ pip-cache/
 apt-cache/
 temp/
 settings/
+telegram-bot-api-data/
