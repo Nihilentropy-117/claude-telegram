@@ -6,7 +6,6 @@ Raw httpx against Telegram API. No framework.
 """
 
 import asyncio
-import html
 import logging
 import os
 import signal
@@ -60,6 +59,7 @@ class Config:
         c.default_model = os.environ.get("DEFAULT_MODEL", c.default_model)
         c.default_effort = os.environ.get("DEFAULT_EFFORT", c.default_effort)
         c.max_turns = int(os.environ.get("MAX_TURNS", c.max_turns))
+        c.stream_interval_ms = int(os.environ.get("STREAM_INTERVAL_MS", c.stream_interval_ms))
         return c
 
 
@@ -69,9 +69,9 @@ class Config:
 
 @dataclass
 class UserState:
-    project: str = ""
-    model: str = "sonnet"
-    effort: str = "high"
+    project: str
+    model: str
+    effort: str
     think: str = "off"           # off | on | last
     last_thinking: str = ""
     busy: bool = False
@@ -87,6 +87,7 @@ class UserState:
             permission_mode="bypassPermissions",
             cwd=self.project,
             max_turns=config.max_turns,
+            effort=self.effort,
             system_prompt=(
                 "You are Claude Code, accessed via Telegram. "
                 "Keep responses concise for mobile reading. "
@@ -120,7 +121,7 @@ class UserState:
                 pass
             self.client = None
 
-    async def new_session(self, config: Config):
+    async def new_session(self):
         await self.destroy_client()
 
 
@@ -135,8 +136,7 @@ class TelegramAPI:
         self.file_base = f"{base_url}/file/bot{token}"
         self.client = client
 
-    async def call(self, method: str, **params) -> dict:
-        http_timeout = params.pop("_http_timeout", 60)
+    async def call(self, method: str, *, http_timeout: int = 60, **params) -> dict:
         params = {k: v for k, v in params.items() if v is not None}
         resp = await self.client.post(f"{self.base}/{method}", json=params, timeout=http_timeout)
         data = resp.json()
@@ -145,8 +145,8 @@ class TelegramAPI:
         return data
 
     async def get_updates(self, offset: int | None = None, timeout: int = 30) -> list[dict]:
-        data = await self.call("getUpdates", offset=offset, timeout=timeout,
-                               _http_timeout=timeout + 10)
+        data = await self.call("getUpdates", http_timeout=timeout + 10,
+                               offset=offset, timeout=timeout)
         return data.get("result", [])
 
     async def send_message(self, chat_id: int, text: str, **kwargs) -> dict:
@@ -204,63 +204,47 @@ class TelegramAPI:
 # ---------------------------------------------------------------------------
 
 def _truncate(s: str, max_len: int) -> str:
-    s = str(s)
     return s if len(s) <= max_len else s[:max_len] + "…"
 
 
-def _h(s: str, max_len: int = 0) -> str:
-    """HTML-escape a string, optionally truncating first."""
-    if max_len:
-        s = _truncate(s, max_len)
-    return html.escape(s)
+def _format_tool_status(name: str, inp: dict) -> str:
+    """Format a tool invocation as a Markdown status line."""
+    match name:
+        case "Bash":
+            return f"⚙️ *Bash*\n```\n{_truncate(inp.get('command', ''), 400)}\n```"
+        case "Read":
+            path = inp.get("file_path", "")
+            offset, limit = inp.get("offset"), inp.get("limit")
+            extra = f" (lines {offset or 0}–{(offset or 0) + (limit or 0)})" if (offset or limit) else ""
+            return f"📖 *Read* `{_truncate(path, 200)}`{extra}"
+        case "Write":
+            return f"✏️ *Write* `{_truncate(inp.get('file_path', ''), 200)}`"
+        case "Edit":
+            return f"✏️ *Edit* `{_truncate(inp.get('file_path', ''), 200)}`"
+        case "Glob":
+            return f"🔍 *Glob* `{_truncate(inp.get('pattern', ''), 200)}`"
+        case "Grep":
+            pattern, path = inp.get("pattern", ""), inp.get("path", "")
+            loc = f" in `{_truncate(path, 100)}`" if path else ""
+            return f"🔍 *Grep* `{_truncate(pattern, 200)}`{loc}"
+        case "WebSearch":
+            return f"🌐 *WebSearch* `{_truncate(inp.get('query', ''), 200)}`"
+        case "WebFetch":
+            return f"🌐 *WebFetch* `{_truncate(inp.get('url', ''), 200)}`"
+        case "Agent":
+            desc = inp.get("description", inp.get("prompt", ""))
+            return f"🤖 *Agent* _{_truncate(desc, 150)}_"
+        case "TodoWrite":
+            return "📝 *TodoWrite* _(updating task list)_"
+        case _:
+            inp_str = _truncate(str(inp), 120) if inp else ""
+            return f"⚙️ *{name}*: `{inp_str}`" if inp_str else f"⚙️ *{name}*"
 
 
 async def send_tool_status(tg: TelegramAPI, chat_id: int, block: "ToolUseBlock"):
     """Send a live status message whenever Claude invokes a tool."""
-    name = block.name
     inp = getattr(block, "input", {}) or {}
-
-    if name == "Bash":
-        cmd = inp.get("command", "")
-        line = f"⚙️ <b>Bash</b>\n<pre>{_h(cmd, 400)}</pre>"
-    elif name == "Read":
-        path = inp.get("file_path", "")
-        offset = inp.get("offset")
-        limit = inp.get("limit")
-        extra = ""
-        if offset or limit:
-            extra = f" (lines {offset or 0}–{(offset or 0) + (limit or 0)})"
-        line = f"📖 <b>Read</b> <code>{_h(path)}</code>{extra}"
-    elif name == "Write":
-        path = inp.get("file_path", "")
-        line = f"✏️ <b>Write</b> <code>{_h(path)}</code>"
-    elif name == "Edit":
-        path = inp.get("file_path", "")
-        line = f"✏️ <b>Edit</b> <code>{_h(path)}</code>"
-    elif name == "Glob":
-        pattern = inp.get("pattern", "")
-        line = f"🔍 <b>Glob</b> <code>{_h(pattern)}</code>"
-    elif name == "Grep":
-        pattern = inp.get("pattern", "")
-        path = inp.get("path", "")
-        loc = f" in <code>{_h(path)}</code>" if path else ""
-        line = f"🔍 <b>Grep</b> <code>{_h(pattern)}</code>{loc}"
-    elif name == "WebSearch":
-        query = inp.get("query", "")
-        line = f"🌐 <b>WebSearch</b> <code>{_h(query, 200)}</code>"
-    elif name == "WebFetch":
-        url = inp.get("url", "")
-        line = f"🌐 <b>WebFetch</b> <code>{_h(url, 200)}</code>"
-    elif name == "Agent":
-        desc = inp.get("description", inp.get("prompt", ""))
-        line = f"🤖 <b>Agent</b> <i>{_h(desc, 150)}</i>"
-    elif name == "TodoWrite":
-        line = "📝 <b>TodoWrite</b> <i>(updating task list)</i>"
-    else:
-        inp_str = _truncate(str(inp), 120) if inp else ""
-        line = f"⚙️ <b>{_h(name)}</b>: <code>{_h(inp_str)}</code>" if inp_str else f"⚙️ <b>{_h(name)}</b>"
-
-    await tg.send_message(chat_id, line, parse_mode="HTML")
+    await tg.send_message(chat_id, _format_tool_status(block.name, inp))
 
 
 # ---------------------------------------------------------------------------
@@ -292,11 +276,11 @@ class StreamBridge:
     async def finalize(self, full_text: str):
         if not full_text.strip():
             full_text = "_(empty response)_"
-        for chunk in self._chunk_text(full_text, 4096):
+        for chunk in self.chunk_text(full_text, 4096):
             await self.tg.send_message(self.chat_id, chunk)
 
     @staticmethod
-    def _chunk_text(text: str, max_len: int) -> list[str]:
+    def chunk_text(text: str, max_len: int) -> list[str]:
         if len(text) <= max_len:
             return [text]
         chunks = []
@@ -446,6 +430,18 @@ async def extract_message(msg: dict, tg: TelegramAPI) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def get_or_create_state(user_id: int, states: dict[int, "UserState"], config: "Config") -> "UserState":
+    return states.setdefault(user_id, UserState(
+        project=config.default_project,
+        model=config.default_model,
+        effort=config.default_effort,
+    ))
+
+
+# ---------------------------------------------------------------------------
 # Command handlers
 # ---------------------------------------------------------------------------
 
@@ -472,15 +468,13 @@ async def handle_command(
     cmd: str, args: str, chat_id: int, user_id: int,
     tg: TelegramAPI, config: Config, states: dict[int, UserState],
 ) -> bool:
-    state = states.setdefault(user_id, UserState(project=config.default_project,
-                                                  model=config.default_model,
-                                                  effort=config.default_effort))
+    state = get_or_create_state(user_id, states, config)
     match cmd:
         case "/help" | "/start":
             await tg.send_message(chat_id, HELP_TEXT)
 
         case "/new":
-            await state.new_session(config)
+            await state.new_session()
             await tg.send_message(chat_id, "New session. Send a message to begin.")
 
         case "/interrupt":
@@ -499,7 +493,7 @@ async def handle_command(
                 await tg.send_message(chat_id, f"Current: `{state.project}`\nUsage: `/project <path>`")
             elif os.path.isdir(path):
                 state.project = path
-                await state.new_session(config)
+                await state.new_session()
                 await tg.send_message(chat_id, f"Project: `{path}` (new session)")
             else:
                 await tg.send_message(chat_id, f"Not found: `{path}`")
@@ -508,7 +502,7 @@ async def handle_command(
             m = args.strip().lower()
             if m in ("opus", "sonnet", "haiku"):
                 state.model = m
-                await state.new_session(config)
+                await state.new_session()
                 await tg.send_message(chat_id, f"Model: `{m}` (new session)")
             else:
                 await tg.send_message(chat_id, f"Current: `{state.model}`\nUsage: `/model <opus|sonnet|haiku>`")
@@ -525,7 +519,7 @@ async def handle_command(
             t = args.strip().lower()
             if t == "last":
                 if state.last_thinking:
-                    for chunk in StreamBridge._chunk_text(state.last_thinking, 4000):
+                    for chunk in StreamBridge.chunk_text(state.last_thinking, 4000):
                         await tg.send_message(chat_id, f"```\n{chunk}\n```")
                 else:
                     await tg.send_message(chat_id, "No thinking from last response.")
@@ -559,9 +553,7 @@ async def handle_message(
     text: str, chat_id: int, user_id: int,
     tg: TelegramAPI, config: Config, states: dict[int, UserState],
 ):
-    state = states.setdefault(user_id, UserState(project=config.default_project,
-                                                  model=config.default_model,
-                                                  effort=config.default_effort))
+    state = get_or_create_state(user_id, states, config)
     if state.busy:
         await tg.send_message(chat_id, "Still working. Hold on.")
         return
@@ -598,7 +590,7 @@ async def handle_message(
         full_text = "".join(full_text_parts)
 
         if state.think == "on" and state.last_thinking:
-            for chunk in StreamBridge._chunk_text(state.last_thinking, 4000):
+            for chunk in StreamBridge.chunk_text(state.last_thinking, 4000):
                 await tg.send_message(chat_id, f"💭 _{chunk}_")
 
         await bridge.finalize(full_text)
