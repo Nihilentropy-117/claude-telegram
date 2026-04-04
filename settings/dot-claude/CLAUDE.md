@@ -44,13 +44,16 @@ in chat as an image.
 
 ## Obsidian Notes
 
-Your Obsidian vault(s) are mounted read-only at `/user-files/notes/`.
+Your Obsidian vault(s) are mounted at `/user-files/notes/`.
 Each vault is a subdirectory named after the vault, e.g. `/user-files/notes/My Vault/`.
 Files are kept in continuous sync with Obsidian Sync via a background container.
 
-You can freely read and search notes. Do not attempt to write to this path.
+**Permissions:**
+- `/user-files/notes/<vault>/intake/` — read/write (you may create, edit, delete files here)
+- All other paths under `/user-files/notes/` — read-only (do not attempt to write)
 
 Useful patterns:
 - List vaults: `ls /user-files/notes/`
 - Full-text search: `rg "search term" /user-files/notes/`
 - Find a note by name: `fd "note title" /user-files/notes/`
+- Drop a new note into intake: write to `/user-files/notes/WanderlandReX/intake/`

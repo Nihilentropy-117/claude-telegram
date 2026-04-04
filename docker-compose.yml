@@ -83,3 +83,5 @@ services:
 
       # Obsidian notes (read-only; each vault appears as a subdirectory)
       - ./obsidian/vaults:/user-files/notes:ro
+      # Per-vault intake folders (read-write; overlaps the :ro mount above)
+      - ./obsidian/vaults/WanderlandReX/intake:/user-files/notes/WanderlandReX/intake
