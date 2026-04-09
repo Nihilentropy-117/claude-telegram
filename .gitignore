@@ -1,5 +1,10 @@
 __pycache__/
 *.pyc
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
 claude/venv/
 claude/projects/venv/
 claude/pip-cache/
@@ -8,8 +13,8 @@ claude/temp/
 claude/settings/*
 !claude/settings/dot-claude/
 claude/settings/dot-claude/*
-!settings/dot-claude/CLAUDE.md
-!settings/dot-claude/skills/
+!claude/settings/dot-claude/CLAUDE.md
+!claude/settings/dot-claude/skills/
 .env
 telegram-bot-api-data/
 obsidian/settings/

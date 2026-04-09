@@ -1,0 +1,29 @@
+[project]
+name = "claude-telegram"
+version = "1.0.0"
+description = "Stream Claude Code responses to Telegram in real-time"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx==0.28.1",
+    "claude-agent-sdk==0.1.48",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest==8.3.5",
+    "pytest-asyncio==0.25.3",
+]
+
+[project.scripts]
+claude-telegram = "claude_telegram.__main__:main"
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["claude_telegram*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
