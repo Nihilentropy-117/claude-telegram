@@ -50,6 +50,7 @@ class UserSession:
                 "response. See ~/.claude/CLAUDE.md for full details."
             ),
             env={
+                "HOME": "/root",
                 "ANTHROPIC_MODEL": MODEL_IDS[self.model],
                 "IS_SANDBOX": "1",
             },
