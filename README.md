@@ -1,61 +1,115 @@
-# Claude Code Telegram Bot
+# Claude Telegram Bot
 
-Stream Claude Code responses to Telegram in real-time via `sendMessageDraft` (Bot API 9.5).
+Production-oriented Telegram bridge for Claude Code, implemented as a Python 3.12 service with persistent per-user queues, SQLite-backed preferences, live draft streaming, attachment ingestion, and automatic artifact delivery.
 
-No frameworks. Raw `httpx` against Telegram API, `asyncio.subprocess` for Claude Code CLI.
+## What It Does
 
-## Setup
-
-1. **Create a bot** via [@BotFather](https://t.me/BotFather) on Telegram. Enable streaming in BotFather settings.
-
-2. **Get your user ID** from [@userinfobot](https://t.me/userinfobot).
-
-3. **Configure:**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your token, user ID, and API key
-   ```
-
-4. **Deploy:**
-   ```bash
-   docker compose up -d --build
-   ```
-
-5. **Mount your projects** by editing `docker-compose.yml` volumes. The default maps `~/projects` to `/projects` inside the container.
+- Accepts Telegram messages from authorized users and forwards them to Claude Code.
+- Preserves one Claude conversation per Telegram user until `/new`, `/project`, `/model`, or `/effort` resets it.
+- Streams partial assistant output with `sendMessageDraft`, then sends the final response as normal Telegram messages.
+- Accepts documents, photos, voice notes, audio files, videos, locations, and contacts.
+- Saves inbound files under `/temp` and tells Claude where they were written.
+- Sends files that Claude writes to `/temp/outbox/` back to Telegram automatically.
+- Runs with Docker Compose alongside a local Telegram Bot API server and an optional Obsidian sync sidecar.
 
 ## Commands
 
-| Command | Description |
-|---|---|
-| `/new [name]` | Start a new Claude Code session |
-| `/continue` | Resume the last session |
-| `/resume <id>` | Resume a specific session |
-| `/compact` | Compress session context |
-| `/project <path>` | Switch working directory (container paths) |
-| `/model <opus\|sonnet\|haiku>` | Switch model |
-| `/effort <low\|medium\|high>` | Set reasoning depth |
-| `/tools <safe\|full>` | Toggle tool permissions |
-| `/think <on\|off\|last>` | Control thinking visibility |
-| `/status` | Show current config |
+- `/start`
+- `/help`
+- `/new`
+- `/interrupt`
+- `/project <path>`
+- `/model <opus|sonnet|haiku>`
+- `/effort <low|medium|high>`
+- `/think <on|off|last>`
+- `/status`
 
-## How it works
+## Install
 
-```
-You (Telegram) → bot.py → claude -p --output-format stream-json
-                                    ↓
-                              NDJSON events
-                                    ↓
-                         text_delta → sendMessageDraft (live streaming)
-                      thinking_delta → cached (or streamed if /think on)
-                                    ↓
-                         message_stop → sendMessage (final)
+1. Copy `.env.example` to `.env`.
+2. Fill in the required values.
+3. Adjust the bind mounts in `docker-compose.yml` if your local project and file paths differ.
+4. For local development outside Docker:
+
+```bash
+python -m venv .venv
+.venv/bin/pip install -r requirements.txt
 ```
 
-## Notes
+## Run
 
-- **Auth**: Only whitelisted Telegram user IDs can interact. Set `ALLOWED_USER_IDS` in `.env`.
-- **Skills**: Any skills in `~/.claude/skills/` or your project's `.claude/skills/` are picked up automatically by Claude Code. No bot-side config needed.
-- **Sessions**: Claude Code persists sessions on disk. The `claude-data` volume preserves them across container restarts.
-- **Tools**: Default is read-only (`Read,Grep,Glob`). Use `/tools full` to enable writes — this gives Claude Code `Read,Write,Edit,Bash,Grep,Glob`.
-- **Streaming commission**: Telegram charges 15% on Stars purchases when streaming is enabled. Irrelevant unless you add paid features.
-- **sendMessageDraft**: If the Telegram client doesn't support it yet (older versions), the draft just won't render mid-stream. The final `sendMessage` always works.
+```bash
+docker compose up -d --build
+```
+
+The stack starts:
+
+- `claude-bot`: the Python application
+- `telegram-bot-api`: local Telegram Bot API server for large-file support and direct shared-volume file reads
+- `obsidian-sync`: optional continuous Obsidian Sync mirror
+
+## Test
+
+Create a local virtual environment, install the pinned dependencies, and run:
+
+```bash
+PYTHONPATH=src python -m unittest discover -s tests -v
+```
+
+## Environment Variables
+
+Required:
+
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_API_ID`
+- `TELEGRAM_API_HASH`
+
+Optional:
+
+- `ALLOWED_USER_IDS`
+- `TELEGRAM_API_BASE`
+- `DEFAULT_PROJECT`
+- `DEFAULT_MODEL`
+- `DEFAULT_EFFORT`
+- `MAX_TURNS`
+- `STREAM_INTERVAL_MS`
+- `CLAUDE_PERMISSION_MODE`
+- `STATE_DB_PATH`
+- `TEMP_DIR`
+- `OUTBOX_DIR`
+- `LOCAL_BOT_API_STORAGE_PATH`
+- `POLL_TIMEOUT_SECONDS`
+- `LOG_LEVEL`
+- `ANTHROPIC_API_KEY`
+- `OPENROUTER_API_KEY`
+- `SIMPLEFIN_ACCESS_URL`
+- `SPLITWISE_API_KEY`
+- `SPLITWISE_CONSUMER_KEY`
+- `SPLITWISE_CONSUMER_SECRET`
+- `TODOIST_API_KEY`
+- `OBSIDIAN_VAULT_NAMES`
+- `OBSIDIAN_AUTH_TOKEN`
+- `OBSIDIAN_EMAIL`
+- `OBSIDIAN_PASSWORD`
+- `OBSIDIAN_VAULT_PASSWORD`
+
+## Mounted Paths Claude Relies On
+
+- `/projects`: default working tree root for Claude
+- `/temp`: inbound file staging area
+- `/temp/outbox`: outbound artifact directory
+- `/settings`: persisted Claude config and SQLite state
+- `/user-files/files`: read-only user files
+- `/user-files/media`: read-only media
+- `/user-files/rw_files`: writable shared files
+- `/user-files/rw_media`: writable shared media
+- `/user-files/notes`: Obsidian vault mirror
+
+## Dependency Pins
+
+- `aiogram==3.26.0`
+- `claude-agent-sdk==0.1.48`
+- `pydantic==2.12.5`
+- `pydantic-settings==2.12.0`
+- `aiosqlite==0.22.1`
+- `obsidian-headless@0.0.8`

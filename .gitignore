@@ -8,9 +8,10 @@ claude/temp/
 claude/settings/*
 !claude/settings/dot-claude/
 claude/settings/dot-claude/*
-!settings/dot-claude/CLAUDE.md
-!settings/dot-claude/skills/
+!claude/settings/dot-claude/CLAUDE.md
+!claude/settings/dot-claude/skills/
 .env
 telegram-bot-api-data/
 obsidian/settings/
 obsidian/vaults/
+.venv/

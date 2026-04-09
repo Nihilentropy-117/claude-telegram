@@ -4,18 +4,13 @@ services:
     container_name: obsidian-sync
     restart: unless-stopped
     environment:
-      # Auth: token takes precedence; falls back to email + password
       OBSIDIAN_AUTH_TOKEN: ${OBSIDIAN_AUTH_TOKEN:-}
       OBSIDIAN_EMAIL: ${OBSIDIAN_EMAIL:-}
       OBSIDIAN_PASSWORD: ${OBSIDIAN_PASSWORD:-}
-      # Comma-separated vault names, e.g. "My Vault" or "Vault1,Vault2"
-      OBSIDIAN_VAULT_NAMES: ${OBSIDIAN_VAULT_NAMES}
-      # E2E encryption password (only needed if vault has it enabled)
+      OBSIDIAN_VAULT_NAMES: ${OBSIDIAN_VAULT_NAMES:-}
       OBSIDIAN_VAULT_PASSWORD: ${OBSIDIAN_VAULT_PASSWORD:-}
     volumes:
-      # Persistent auth + CLI config
       - ./obsidian/settings:/root/.config
-      # Synced vault files (one subdirectory per vault name)
       - ./obsidian/vaults:/vaults
 
   telegram-bot-api:
@@ -30,12 +25,12 @@ services:
       - ./telegram-bot-api-data:/var/lib/telegram-bot-api
     ports:
       - "8081:8081"
-#      healthcheck:
-#      test: ["CMD", "curl", "-sf", "http://localhost:8081"]
-#      interval: 10s
-#      timeout: 5s
-#      retries: 5
-#      start_period: 30s
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8081"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   claude-bot:
     build: .
@@ -43,48 +38,44 @@ services:
     restart: unless-stopped
     stdin_open: true
     tty: true
-  #  depends_on:
-  #    telegram-bot-api:
-  #      condition: service_healthy
+    depends_on:
+      telegram-bot-api:
+        condition: service_healthy
     environment:
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_API_BASE=http://telegram-bot-api:8081
-      - ALLOWED_USER_IDS=${ALLOWED_USER_IDS}
-      - DEFAULT_PROJECT=/projects
-      - DEFAULT_MODEL=sonnet
-      - DEFAULT_EFFORT=high
-      - MAX_TURNS=10
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - SIMPLEFIN_ACCESS_URL=${SIMPLEFIN_ACCESS_URL:-}
-      - SPLITWISE_API_KEY=${SPLITWISE_API_KEY:-}
-      - SPLITWISE_CONSUMER_KEY=${SPLITWISE_CONSUMER_KEY:-}
-      - SPLITWISE_CONSUMER_SECRET=${SPLITWISE_CONSUMER_SECRET:-}
-      - TODOIST_API_KEY=${TODOIST_API_KEY:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_API_BASE: ${TELEGRAM_API_BASE:-http://telegram-bot-api:8081}
+      ALLOWED_USER_IDS: ${ALLOWED_USER_IDS:-}
+      DEFAULT_PROJECT: ${DEFAULT_PROJECT:-/projects}
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-sonnet}
+      DEFAULT_EFFORT: ${DEFAULT_EFFORT:-high}
+      MAX_TURNS: ${MAX_TURNS:-10}
+      STREAM_INTERVAL_MS: ${STREAM_INTERVAL_MS:-150}
+      CLAUDE_PERMISSION_MODE: ${CLAUDE_PERMISSION_MODE:-bypassPermissions}
+      STATE_DB_PATH: ${STATE_DB_PATH:-/settings/state.sqlite3}
+      TEMP_DIR: ${TEMP_DIR:-/temp}
+      OUTBOX_DIR: ${OUTBOX_DIR:-/temp/outbox}
+      LOCAL_BOT_API_STORAGE_PATH: ${LOCAL_BOT_API_STORAGE_PATH:-/var/lib/telegram-bot-api}
+      POLL_TIMEOUT_SECONDS: ${POLL_TIMEOUT_SECONDS:-30}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      SIMPLEFIN_ACCESS_URL: ${SIMPLEFIN_ACCESS_URL:-}
+      SPLITWISE_API_KEY: ${SPLITWISE_API_KEY:-}
+      SPLITWISE_CONSUMER_KEY: ${SPLITWISE_CONSUMER_KEY:-}
+      SPLITWISE_CONSUMER_SECRET: ${SPLITWISE_CONSUMER_SECRET:-}
+      TODOIST_API_KEY: ${TODOIST_API_KEY:-}
     tmpfs:
       - /user-files
     volumes:
-      # Claude Code config
       - ./claude/settings:/settings
-      # Project directories
       - ./claude/projects:/projects
-      # Persistent Python venv
       - ./claude/venv:/venv
-      # Pip download cache
       - ./claude/pip-cache:/pip-cache
-      # Apt package cache
-      - ./claude/apt-cache:/var/cache/apt
-      # Telegram file downloads
       - ./claude/temp:/temp
-      # Shared Bot API data volume (enables direct local file reads)
       - ./telegram-bot-api-data:/var/lib/telegram-bot-api:ro
-      # Local File Access
       - /mnt/data/user-files:/user-files/files:ro
       - /mnt/media:/user-files/media:ro
-
       - /mnt/data/rw_files:/user-files/rw_files
       - /mnt/media/rw_media:/user-files/rw_media
-
-      # Obsidian notes (read-only; each vault appears as a subdirectory)
       - ./obsidian/vaults:/user-files/notes:ro
       - ./obsidian/vaults/WanderlandReX/intake/:/user-files/notes/WanderlandReX/intake/
