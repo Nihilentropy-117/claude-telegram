@@ -168,7 +168,11 @@ class TelegramAPI:
 
     async def download_file(self, file_path: str) -> bytes:
         """Download a file. With local Bot API, reads directly from the shared volume."""
-        local = Path(f"/var/lib/telegram-bot-api/{file_path}")
+        # Local Bot API returns absolute paths; use directly if absolute
+        if file_path.startswith("/"):
+            local = Path(file_path)
+        else:
+            local = Path(f"/var/lib/telegram-bot-api/{file_path}")
         if local.exists():
             return local.read_bytes()
         url = f"{self.file_base}/{file_path}"

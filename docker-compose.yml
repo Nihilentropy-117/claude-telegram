@@ -55,23 +55,27 @@ services:
       - DEFAULT_EFFORT=high
       - MAX_TURNS=10
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - SIMPLEFIN_ACCESS_URL=${SIMPLEFIN_ACCESS_URL:-}
+      - SPLITWISE_API_KEY=${SPLITWISE_API_KEY:-}
+      - SPLITWISE_CONSUMER_KEY=${SPLITWISE_CONSUMER_KEY:-}
+      - SPLITWISE_CONSUMER_SECRET=${SPLITWISE_CONSUMER_SECRET:-}
+      - TODOIST_API_KEY=${TODOIST_API_KEY:-}
     tmpfs:
       - /user-files
-
     volumes:
       # Claude Code config
-      - ./settings:/settings
+      - ./claude/settings:/settings
       # Project directories
-      - ./projects:/projects
+      - ./claude/projects:/projects
       # Persistent Python venv
-      - ./venv:/venv
+      - ./claude/venv:/venv
       # Pip download cache
-      - ./pip-cache:/pip-cache
+      - ./claude/pip-cache:/pip-cache
       # Apt package cache
-      - ./apt-cache:/var/cache/apt
+      - ./claude/apt-cache:/var/cache/apt
       # Telegram file downloads
-      - ./temp:/temp
+      - ./claude/temp:/temp
       # Shared Bot API data volume (enables direct local file reads)
       - ./telegram-bot-api-data:/var/lib/telegram-bot-api:ro
       # Local File Access
@@ -83,3 +87,4 @@ services:
 
       # Obsidian notes (read-only; each vault appears as a subdirectory)
       - ./obsidian/vaults:/user-files/notes:ro
+      - ./obsidian/vaults/WanderlandReX/intake/:/user-files/notes/WanderlandReX/intake/
