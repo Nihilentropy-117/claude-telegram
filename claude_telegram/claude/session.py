@@ -49,6 +49,7 @@ class UserSession:
                 "the bot will automatically deliver it to Telegram after your "
                 "response. See ~/.claude/CLAUDE.md for full details."
             ),
+            setting_sources=["user", "project", "local"],
             env={
                 "HOME": "/root",
                 "ANTHROPIC_MODEL": MODEL_IDS[self.model],
