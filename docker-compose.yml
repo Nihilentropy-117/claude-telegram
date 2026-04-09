@@ -38,9 +38,10 @@ services:
     restart: unless-stopped
     stdin_open: true
     tty: true
-    depends_on:
-      telegram-bot-api:
-        condition: service_healthy
+    # Uncomment if using the local Bot API server (requires TELEGRAM_API_ID and TELEGRAM_API_HASH)
+    # depends_on:
+    #   telegram-bot-api:
+    #     condition: service_healthy
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_API_BASE=http://telegram-bot-api:8081
