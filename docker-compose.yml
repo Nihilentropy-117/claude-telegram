@@ -25,12 +25,12 @@ services:
       - ./telegram-bot-api-data:/var/lib/telegram-bot-api
     ports:
       - "8081:8081"
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8081"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+#    healthcheck:
+ #     test: ["CMD", "curl", "-sf", "http://localhost:8081"]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 5
+#      start_period: 30s
 
   claude-bot:
     build: .
@@ -38,9 +38,9 @@ services:
     restart: unless-stopped
     stdin_open: true
     tty: true
-    depends_on:
-      telegram-bot-api:
-        condition: service_healthy
+ #   depends_on:
+ #     telegram-bot-api:
+#$        condition: service_healthy
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_API_BASE: ${TELEGRAM_API_BASE:-http://telegram-bot-api:8081}
