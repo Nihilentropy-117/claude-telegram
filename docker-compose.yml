@@ -4,18 +4,13 @@ services:
     container_name: obsidian-sync
     restart: unless-stopped
     environment:
-      # Auth: token takes precedence; falls back to email + password
       OBSIDIAN_AUTH_TOKEN: ${OBSIDIAN_AUTH_TOKEN:-}
       OBSIDIAN_EMAIL: ${OBSIDIAN_EMAIL:-}
       OBSIDIAN_PASSWORD: ${OBSIDIAN_PASSWORD:-}
-      # Comma-separated vault names, e.g. "My Vault" or "Vault1,Vault2"
-      OBSIDIAN_VAULT_NAMES: ${OBSIDIAN_VAULT_NAMES}
-      # E2E encryption password (only needed if vault has it enabled)
+      OBSIDIAN_VAULT_NAMES: ${OBSIDIAN_VAULT_NAMES:-}
       OBSIDIAN_VAULT_PASSWORD: ${OBSIDIAN_VAULT_PASSWORD:-}
     volumes:
-      # Persistent auth + CLI config
       - ./obsidian/settings:/root/.config
-      # Synced vault files (one subdirectory per vault name)
       - ./obsidian/vaults:/vaults
 
   telegram-bot-api:
@@ -23,19 +18,19 @@ services:
     container_name: telegram-bot-api
     restart: unless-stopped
     environment:
-      TELEGRAM_API_ID: ${TELEGRAM_API_ID}
-      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID:-}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
       TELEGRAM_LOCAL: 1
     volumes:
       - ./telegram-bot-api-data:/var/lib/telegram-bot-api
     ports:
       - "8081:8081"
-#      healthcheck:
-#      test: ["CMD", "curl", "-sf", "http://localhost:8081"]
-#      interval: 10s
-#      timeout: 5s
-#      retries: 5
-#      start_period: 30s
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8081"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   claude-bot:
     build: .
@@ -43,9 +38,10 @@ services:
     restart: unless-stopped
     stdin_open: true
     tty: true
-  #  depends_on:
-  #    telegram-bot-api:
-  #      condition: service_healthy
+    # Uncomment if using the local Bot API server (requires TELEGRAM_API_ID and TELEGRAM_API_HASH)
+    # depends_on:
+    #   telegram-bot-api:
+    #     condition: service_healthy
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_API_BASE=http://telegram-bot-api:8081
@@ -55,7 +51,7 @@ services:
       - DEFAULT_EFFORT=high
       - MAX_TURNS=10
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - SIMPLEFIN_ACCESS_URL=${SIMPLEFIN_ACCESS_URL:-}
       - SPLITWISE_API_KEY=${SPLITWISE_API_KEY:-}
       - SPLITWISE_CONSUMER_KEY=${SPLITWISE_CONSUMER_KEY:-}
@@ -78,13 +74,11 @@ services:
       - ./claude/temp:/temp
       # Shared Bot API data volume (enables direct local file reads)
       - ./telegram-bot-api-data:/var/lib/telegram-bot-api:ro
-      # Local File Access
+      # Local file access
       - /mnt/data/user-files:/user-files/files:ro
       - /mnt/media:/user-files/media:ro
-
       - /mnt/data/rw_files:/user-files/rw_files
       - /mnt/media/rw_media:/user-files/rw_media
-
       # Obsidian notes (read-only; each vault appears as a subdirectory)
       - ./obsidian/vaults:/user-files/notes:ro
       - ./obsidian/vaults/WanderlandReX/intake/:/user-files/notes/WanderlandReX/intake/
